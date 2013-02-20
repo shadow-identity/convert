@@ -15,38 +15,40 @@ wk_dir = root
 if __name__ == '__main__':
     pass
 
-import os, subprocess
+import os, subprocess, logging, datetime
 from os.path import join, getsize
 
+logging.basicConfig(level = logging.INFO, filename = 'convert.log')
 source_dir = '/home/nedr/progs/convert/test_area'
-dest_dir = '/home/nedr/progs/convert/test_area/converted'
+old_files_dir = '/home/nedr/progs/convert/test_area/converted'
 source_extention = '.mov'
 dest_extention = '.avi'
 command = 'ffmpeg'
 options = ''
-movnames = []   # list with filenames
-# os.path.join(dirpath, name)
-for dirpath, dirnames, filenames in os.walk(source_dir, topdown=True):
+logging.info('''== %s === 
+converting %s
+from       %s
+to         %s
+using      %s %s
+backups of %s moves to %s
+     saving full path''', 
+             datetime.datetime.now().strftime("%Y %B %d %I:%M%p"),
+             source_extention, source_dir, dest_extention, command, options,
+             source_extention, old_files_dir)
+
+
+# searching files ended with source_extention
+for dirpath, dirnames, filenames in os.walk(source_dir):
     for filename in filenames:
         sourcefilename = join(dirpath, filename)
         destfilename = join(dirpath, filename + dest_extention)
-        if (filename.endswith(source_extention) and 
+        if (filename.lower().endswith(source_extention.lower()) and 
             not (os.path.exists(destfilename)
             and getsize(destfilename) != 0)):
-            print sourcefilename 
-            print '--> %s' %destfilename
-            #subprocess.call(['echo', command, sourcefilename, destfilename,
-            #                 options])
-    
-    """for fname in files:
-        if (not os.path.exists(os.path.join(root,fname)) or 
-            getsize(os.path.join(root,fname + '.avi')) = 0 ):"""
-            
-    '''movnames.append(os.path.join(root, fname))'''
-    '''for fname in files:
-        if ('.MOV' in fname[-4:]):
-            fullname = root + '/' + fname
-            print fullname
-            movnames.append(fullname)'''
-        
-    '''movnames = [os.path.join(root,fname) for fname in files if fname.endswith('.MOV')]'''
+            if subprocess.call(['echo', command, sourcefilename, destfilename,
+                                options]):
+                logging.error('Error while converting %s' %sourcefilename)
+            # backup folder existing check and movin
+            if not os.access(old_files_dir + dirpath, os.F_OK):
+                os.makedirs(old_files_dir + dirpath,0700)
+            os.rename(sourcefilename, old_files_dir + sourcefilename)
