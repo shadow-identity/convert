@@ -20,7 +20,7 @@ import subprocess
 import logging
 import datetime
 import argparse
-import  ConfigParser
+import ConfigParser
 from os.path import join
 
 parser = argparse.ArgumentParser()
