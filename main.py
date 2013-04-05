@@ -12,10 +12,9 @@ wk_dir = root
 
 @author: nedr
 """
-
-
-
 #TODO: logging to file (verbose)
+#TODO: exceptions
+
 import os
 import subprocess
 import logging
@@ -36,14 +35,12 @@ def main(argv=None):
     # We make this parser with add_help=False so that
     # it doesn't parse -h and print help.
     conf_parser = argparse.ArgumentParser(
-        description=__doc__,
         # Don't mess with format of description
         formatter_class=argparse.RawDescriptionHelpFormatter,
         # Turn off help, so we print all options in response to -h
-        add_help=False
-        )
-    conf_parser.add_argument("-c", "--conf_file",
-                        help="Specify config file", metavar="FILE")
+        add_help=False)
+    conf_parser.add_argument("--conf_file",
+                             help="Specify config file", metavar="FILE")
     args, remaining_argv = conf_parser.parse_known_args()
 
     if args.conf_file:
@@ -51,80 +48,84 @@ def main(argv=None):
         config.read([args.conf_file])
         defaults = dict(config.items("Main"))
     else:
-        defaults = {"source_dir": "default"}
+        defaults = {
+            'source_dir': '/home/nedr/progs/convert/test_area',
+            'old_files_dir': '/home/nedr/progs/convert/converted',
+            'source_extention': '.mov',
+            'dest_extention': '.avi',
+            'command': 'echo',
+            'options': '',
+            'resursive': 'yes'}
 
     # Parse rest of arguments
-    # Don't suppress add_help here so it will handle -h
     parser = argparse.ArgumentParser(
+        description=__doc__,
         # Inherit options from config_parser
-        parents=[conf_parser]
-        )
+        parents=[conf_parser])
+
     parser.set_defaults(**defaults)
 
     parser.add_argument('-v', '--verbose', help='increase output verbosity',
                         action='store_true')
-    parser.add_argument('-s', '--source_dir',
+    parser.add_argument('-d', '--source_dir',
                         help='source directory, searching begins from')
-    parser.add_argument('-o', '--old_files_dir',
+    parser.add_argument('-D', '--old_files_dir',
                         help='directory to store old (unchanged) files')
     parser.add_argument('-e', '--source_extention',
                         help='source files extantion')
     parser.add_argument('-E', '--dest_extention',
                         help='extention, that changed files will have')
-    parser.add_argument('--command', help='converting command')
-    parser.add_argument('-O', '--options',
+    parser.add_argument('-c', '--command', help='converting command')
+    parser.add_argument('-o', '--options',
                         help='options of converting command')
     parser.add_argument('-r', '--recursive', help='recursive search',
                         action='store_true')
-
     args = parser.parse_args(remaining_argv)
-    print "source_dir is \"{}\"".format(args.source_dir)
-
     logging.basicConfig(level=logging.INFO, filename='convert.log')
 
-    source_dir = '/home/nedr/progs/convert/test_area'
-    old_files_dir = '/home/nedr/progs/convert/test_area/converted'
-    source_extention = '.mov'
-    dest_extention = '.avi'
-    command = 'echo'
-    options = ''
-    logging.info('''== %s ===
+    logging.info(
+ '''== %s ===
     converting %s
     from       %s
     to         %s
     using      %s %s
     backups of %s moves to %s
-         saving full path, OVERWRITING existing files''',
+    saving full path, OVERWRITING existing files''',
              datetime.datetime.now().strftime("%Y %B %d %I:%M%p"),
-             source_extention, source_dir, dest_extention, command, options,
-             source_extention, old_files_dir)
+             args.source_extention,
+             args.source_dir,
+             args.dest_extention,
+             args.command,
+             args.options,
+             args.source_extention,
+             args.old_files_dir)
 
     # searching files ended with source_extention
-    """for dirpath, dirnames, filenames in os.walk(source_dir):
+    for dirpath, dirnames, filenames in os.walk(args.source_dir):
         for filename in filenames:
             sourcefilename = join(dirpath, filename)
-            if filename.lower().endswith(source_extention.lower()):
-                destfilename = join(dirpath, filename + dest_extention)
+            if filename.lower().endswith(args.source_extention.lower()):
+                destfilename = join(dirpath, filename + args.dest_extention)
                 if os.path.exists(destfilename):
                     os.remove(destfilename)
                 print dirpath
                 print filename
                 print sourcefilename
-                if subprocess.call([command, sourcefilename, destfilename,
-                                    options]):
+                if subprocess.call([args.command, sourcefilename, destfilename,
+                                    args.options]):
                     logging.error('Error while converting %s' % sourcefilename)
                 else:
                     logging.info('%s converted successfully', sourcefilename)
                 # backup folder existing check and moving .mov to it
-                if not os.access(old_files_dir + dirpath, os.F_OK):
-                    os.makedirs(old_files_dir + dirpath, 0700)
-                backup_filename = old_files_dir + sourcefilename
+                if not os.access(args.old_files_dir + dirpath, os.F_OK):
+                    os.makedirs(args.old_files_dir + dirpath, 0700)
+                backup_filename = args.old_files_dir + sourcefilename
                 if os.access(backup_filename, os.F_OK):
                     os.remove(backup_filename)
                     logging.info('old backup file %s was removed!',
                                  backup_filename)
                 else:
-                    os.rename(sourcefilename, backup_filename)"""
+                    os.rename(sourcefilename, backup_filename)
 
     return(0)
 
