@@ -3,6 +3,9 @@
 Seek target files in directoryes and run defined command according config or
 command line arguments (arguments overrides config file parameters).
 
+!NB: processing existing files (store/overwrite/error) depends on the behavior
+of the program
+
 main
 wk_dir = root
     os.walk (root, dirs, files)
@@ -49,10 +52,11 @@ def main(argv=None):
         defaults = dict(config.items("Main"))
     else:
         defaults = {
-            'source_dir': '/home/nedr/progs/convert/test_area',
+            'source_dir': '/home/nedr/progs/convert/test_area/source',
             'old_files_dir': '/home/nedr/progs/convert/converted',
             'source_extention': '.mov',
             'dest_extention': '.avi',
+            'store_path': 'yes',
             'command': 'echo',
             'options': '',
             'resursive': 'yes'}
@@ -65,21 +69,32 @@ def main(argv=None):
 
     parser.set_defaults(**defaults)
 
-    parser.add_argument('-v', '--verbose', help='increase output verbosity',
-                        action='store_true')
     parser.add_argument('-d', '--source_dir',
                         help='source directory, searching begins from')
+    parser.add_argument('--convert_if_result_exist',
+                        help='if not - skip them', action='store_true')
+    parser.add_argument('-r', '--recursive',
+                        help='recursive search, not implemented yet',
+                        action='store_true')
+    parser.add_argument('-v', '--verbose', help='increase output verbosity',
+                        action='store_true')
     parser.add_argument('-D', '--old_files_dir',
                         help='directory to store old (unchanged) files')
     parser.add_argument('-e', '--source_extention',
                         help='source files extantion')
     parser.add_argument('-E', '--dest_extention',
                         help='extention, that changed files will have')
+    parser.add_argument('-s', '--store_path',
+                        help='store \'full\' or \'relative\' path of source'
+                        '  files for backing up or \'dont\' save path at all'
+                        ' (dangerous)',
+                        choices=['full', 'relative', 'dont'])
+    parser.add_argument('-f', '--store_existing_backups',
+                        help='don\'t overwrite existing backups',
+                        action='store_true')
     parser.add_argument('-c', '--command', help='converting command')
     parser.add_argument('-o', '--options',
                         help='options of converting command')
-    parser.add_argument('-r', '--recursive', help='recursive search',
-                        action='store_true')
     args = parser.parse_args(remaining_argv)
     logging.basicConfig(level=logging.INFO, filename='convert.log')
 
@@ -87,45 +102,87 @@ def main(argv=None):
  '''== %s ===
     converting %s
     from       %s
-    to         %s
+    to         %s (store path = %s)
     using      %s %s
     backups of %s moves to %s
-    saving full path, OVERWRITING existing files''',
+    overwrite existing converted files: %s
+    store path: %s''',
              datetime.datetime.now().strftime("%Y %B %d %I:%M%p"),
              args.source_extention,
              args.source_dir,
              args.dest_extention,
+             args.store_path,
              args.command,
              args.options,
              args.source_extention,
-             args.old_files_dir)
+             args.old_files_dir,
+             args.convert_if_result_exist,
+             args.store_existing_backups)
 
-    # searching files ended with source_extention
+    # search files ended with source_extention
+    # At first get names of all file and dir objects
     for dirpath, dirnames, filenames in os.walk(args.source_dir):
         for filename in filenames:
-            sourcefilename = join(dirpath, filename)
+            # Check every file extension (end of filename) for compliance to
+            # source_extention
             if filename.lower().endswith(args.source_extention.lower()):
-                destfilename = join(dirpath, filename + args.dest_extention)
-                if os.path.exists(destfilename):
-                    os.remove(destfilename)
+                source_filename = join(dirpath, filename)
+                # Compile destination path and filename (overwrite if exist)
+                dest_path_and_filename = source_filename + args.dest_extention
+                print args.convert_if_result_exist
+                if os.path.exists(dest_path_and_filename) and \
+                   args.convert_if_result_exist == 'no':
+                    print '%s exist, don\'t owerwrite' % dest_path_and_filename
+                    continue
+
+                print 'fr: ', source_filename
+                #TODO: join 
+                backup_path_and_file = join(args.old_files_dir,
+                        os.path.relpath(dirpath, args.source_dir),
+                        dest_path_and_filename)
+                print 'to: ', backup_path_and_file
+                if os.path.exists(backup_path_and_file) is True:
+                    print dest_path_and_filename, ' exist'
+
+                if os.path.exists(source_filename) is True:
+                    print source_filename, 'exist'
+
+                if args.store_path is 'full':
+                    backup_dirname = join(args.old_files_dir, dirpath)
+                elif args.store_path is 'relative':
+                    backup_dirname = join(args.old_files_dir, dirnames)
+                elif args.store_path is 'not':
+                    backup_dirname = args.old_files_dir
+                dest_path_and_filename = filename + args.dest_extention
+
+                #TODO: move it after converting or remove it
+                if os.path.exists(join(backup_dirname,
+                                       dest_path_and_filename)):
+                    if args.store_existing_backups is False:
+                        os.remove(dest_path_and_filename)
+                    else:
+                        continue
+
                 print dirpath
                 print filename
-                print sourcefilename
-                if subprocess.call([args.command, sourcefilename, destfilename,
-                                    args.options]):
-                    logging.error('Error while converting %s' % sourcefilename)
+                print source_filename
+                # Call command. Subprocess.call return non-zero if error
+                # occurs, whithout exception
+                if subprocess.call([args.command, source_filename,
+                                    dest_path_and_filename, args.options]):
+                    logging.error('Error while converting %s' % source_filename)
                 else:
-                    logging.info('%s converted successfully', sourcefilename)
+                    logging.info('%s converted successfully', source_filename)
                 # backup folder existing check and moving .mov to it
-                if not os.access(args.old_files_dir + dirpath, os.F_OK):
+                if not os.access(backup_dirname, os.F_OK):
                     os.makedirs(args.old_files_dir + dirpath, 0700)
-                backup_filename = args.old_files_dir + sourcefilename
+                backup_filename = args.old_files_dir + source_filename
                 if os.access(backup_filename, os.F_OK):
                     os.remove(backup_filename)
                     logging.info('old backup file %s was removed!',
                                  backup_filename)
                 else:
-                    os.rename(sourcefilename, backup_filename)
+                    os.rename(source_filename, backup_filename)
 
     return(0)
 
