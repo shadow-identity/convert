@@ -86,7 +86,7 @@ def main(argv=None):
                         help='extention, that changed files will have')
     parser.add_argument('-s', '--store_path',
                         help='store \'full\' or \'relative\' path of source'
-                        '  files for backing up or \'dont\' save path at all'
+                        ' files for backing up or \'dont\' save path at all'
                         ' (dangerous)',
                         choices=['full', 'relative', 'dont'])
     parser.add_argument('-f', '--store_existing_backups',
@@ -126,26 +126,28 @@ def main(argv=None):
             # Check every file extension (end of filename) for compliance to
             # source_extention
             if filename.lower().endswith(args.source_extention.lower()):
-                source_filename = join(dirpath, filename)
+                source_path_filename = join(dirpath, filename)
                 # Compile destination path and filename (overwrite if exist)
-                dest_path_and_filename = source_filename + args.dest_extention
+                dest_path_filename = source_path_filename + args.dest_extention
                 print args.convert_if_result_exist
-                if os.path.exists(dest_path_and_filename) and \
+                if os.path.exists(dest_path_filename) and \
                    args.convert_if_result_exist == 'no':
-                    print '%s exist, don\'t owerwrite' % dest_path_and_filename
+                    print '%s exist, don\'t owerwrite' % dest_path_filename
                     continue
 
-                print 'fr: ', source_filename
-                #TODO: join 
-                backup_path_and_file = join(args.old_files_dir,
+                print 'fr: ', source_path_filename
+                #TODO: join
+                backup_path_and_file = os.path.abspath(args.old_files_dir) \
+                                        + source_path_filename
+                '''backup_path_and_file = join(args.old_files_dir,
                         os.path.relpath(dirpath, args.source_dir),
-                        dest_path_and_filename)
+                        dest_path_filename)'''
                 print 'to: ', backup_path_and_file
                 if os.path.exists(backup_path_and_file) is True:
-                    print dest_path_and_filename, ' exist'
+                    print dest_path_filename, ' exist'
 
-                if os.path.exists(source_filename) is True:
-                    print source_filename, 'exist'
+                if os.path.exists(source_path_filename) is True:
+                    print source_path_filename, 'exist'
 
                 if args.store_path is 'full':
                     backup_dirname = join(args.old_files_dir, dirpath)
@@ -153,36 +155,36 @@ def main(argv=None):
                     backup_dirname = join(args.old_files_dir, dirnames)
                 elif args.store_path is 'not':
                     backup_dirname = args.old_files_dir
-                dest_path_and_filename = filename + args.dest_extention
+                dest_path_filename = filename + args.dest_extention
 
                 #TODO: move it after converting or remove it
                 if os.path.exists(join(backup_dirname,
-                                       dest_path_and_filename)):
+                                       dest_path_filename)):
                     if args.store_existing_backups is False:
-                        os.remove(dest_path_and_filename)
+                        os.remove(dest_path_filename)
                     else:
                         continue
 
                 print dirpath
                 print filename
-                print source_filename
+                print source_path_filename
                 # Call command. Subprocess.call return non-zero if error
                 # occurs, whithout exception
-                if subprocess.call([args.command, source_filename,
-                                    dest_path_and_filename, args.options]):
-                    logging.error('Error while converting %s' % source_filename)
+                if subprocess.call([args.command, source_path_filename,
+                                    dest_path_filename, args.options]):
+                    logging.error('Error while converting %s' % source_path_filename)
                 else:
-                    logging.info('%s converted successfully', source_filename)
+                    logging.info('%s converted successfully', source_path_filename)
                 # backup folder existing check and moving .mov to it
                 if not os.access(backup_dirname, os.F_OK):
                     os.makedirs(args.old_files_dir + dirpath, 0700)
-                backup_filename = args.old_files_dir + source_filename
+                backup_filename = args.old_files_dir + source_path_filename
                 if os.access(backup_filename, os.F_OK):
                     os.remove(backup_filename)
                     logging.info('old backup file %s was removed!',
                                  backup_filename)
                 else:
-                    os.rename(source_filename, backup_filename)
+                    os.rename(source_path_filename, backup_filename)
 
     return(0)
 
