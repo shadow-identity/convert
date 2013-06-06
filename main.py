@@ -39,7 +39,7 @@ def main(argv=None):
         #TODO: join
         #TODO: check store_path var
         if args.store_path == 'full':
-            return(os.path.abspath(old_files_dir) + source_path_filename)
+            return os.path.abspath(old_files_dir) + source_path_filename
         elif args.store_path == 'relative':
             return (os.path.join(old_files_dir,
                                  os.path.relpath(source_path_filename,
@@ -49,6 +49,8 @@ def main(argv=None):
         '''backup_path_filename = join(args.old_files_dir,
                 os.path.relpath(dirpath, args.source_dir),
                 dest_path_filename)'''
+
+    def conf_arg_parser():
 
     # Parse any conf_file specification
     # We make this parser with add_help=False so that
@@ -70,8 +72,8 @@ def main(argv=None):
         defaults = {
             'source_dir': '/home/nedr/progs/convert/test_area',
             'old_files_dir': '/home/nedr/progs/convert/converted',
-            'source_extention': '.mov',
-            'dest_extention': '.avi',
+            'source_extension': '.mov',
+            'dest_extension': '.avi',
             'store_path': 'full',
             'command': 'echo',
             'options': '',
@@ -96,10 +98,10 @@ def main(argv=None):
                         action='store_true')
     parser.add_argument('-D', '--old_files_dir',
                         help='directory to store old (unchanged) files')
-    parser.add_argument('-e', '--source_extention',
-                        help='source files extantion')
-    parser.add_argument('-E', '--dest_extention',
-                        help='extention, that changed files will have')
+    parser.add_argument('-e', '--source_extension',
+                        help='source files extension')
+    parser.add_argument('-E', '--dest_extension',
+                        help='extension, that changed files will have')
     parser.add_argument('-s', '--store_path',
                         help='store \'full\' or \'relative\' path of source'
                         ' files for backing up or \'dont\' save path at all'
@@ -116,9 +118,8 @@ def main(argv=None):
 
     print args
 
-
     logging.info(
- '''== %s ===
+        '''== %s ===
     converting %s
     from       %s
     to         %s (store path = %s)
@@ -126,45 +127,44 @@ def main(argv=None):
     backups of %s moves to %s
     overwrite existing converted files: %s
     store path: %s''',
-             datetime.datetime.now().strftime("%Y %B %d %I:%M%p"),
-             args.source_extention,
-             args.source_dir,
-             args.dest_extention,
-             args.store_path,
-             args.command,
-             args.options,
-             args.source_extention,
-             args.old_files_dir,
-             args.convert_if_result_exist,
-             args.store_existing_backups)
+        datetime.datetime.now().strftime("%Y %B %d %I:%M%p"),
+        args.source_extension,
+        args.source_dir,
+        args.dest_extension,
+        args.store_path,
+        args.command,
+        args.options,
+        args.source_extension,
+        args.old_files_dir,
+        args.convert_if_result_exist,
+        args.store_existing_backups)
 
-    # search files ended with source_extention
+    # search files ended with source_extension
     # At first get names of all file and directory objects
     for dirpath, dirnames, filenames in os.walk(args.source_dir):
         for filename in filenames:
             # Check every file extension (end of filename) for compliance to
-            # source_extention
-            if filename.lower().endswith(args.source_extention.lower()):
+            # source_extension
+            if filename.lower().endswith(args.source_extension.lower()):
                 source_path_filename = join(dirpath, filename)
                 #FIX: wtf is '(overwrite if exist)'?
                 # Compile destination path and filename (overwrite if exist)
-                dest_path_filename = source_path_filename + args.dest_extention
+                dest_path_filename = source_path_filename + args.dest_extension
                 print args.convert_if_result_exist
-                
-                
+
                 if (os.path.exists(dest_path_filename) and 
-                    args.convert_if_result_exist == 'no'):
-                    print ('destination %s exist, don\'t owerwrite'
-                             % dest_path_filename)
+                        args.convert_if_result_exist == 'no'):
+                    print ('destination %s exist, don\'t overwrite'
+                           % dest_path_filename)
                     continue
 
                 backup_path_filename = get_backup_path_filename(
-                                    store_path=args.store_path, 
-                                    old_files_dir=args.old_files_dir, 
-                                    source_path_filename=source_path_filename, 
-                                    source_dir=args.source_dir, 
-                                    filename=filename
-                                    )
+                    store_path=args.store_path,
+                    old_files_dir=args.old_files_dir,
+                    source_path_filename=source_path_filename,
+                    source_dir=args.source_dir,
+                    filename=filename
+                )
                 print 'from: ', source_path_filename
                 print 'to  : ', dest_path_filename
                 print 'back: ', backup_path_filename
@@ -178,7 +178,7 @@ def main(argv=None):
                     print dest_path_filename, 'exist'
 
                 # Call command. Subprocess.call return non-zero if error
-                # occurs, whithout exception
+                # occurs, without exception
                 if subprocess.call([args.command, source_path_filename,
                                     dest_path_filename, args.options]):
                     logging.error('Error while converting %s' % source_path_filename)
@@ -196,7 +196,7 @@ def main(argv=None):
                 else:
                     os.rename(source_path_filename, backup_filename)
 
-    return(0)
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
