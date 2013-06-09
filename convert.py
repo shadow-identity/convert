@@ -73,12 +73,14 @@ def conf_arg_parser():
     else:
         defaults = {
             'source_dir': '/home/nedr/progs/convert/test_area',
-            'backup_directory': '/home/nedr/progs/convert/converted',
+            'act_original': 'move',
+            'backup_directory': '/home/nedr/progs/convert/backup',
             'source_extension': '.mov',
             'dest_extension': '.avi',
-            'store_path': 'full',
-            'command': 'echo',
-            'options': '',
+            'store_path': 'relative',
+            'command': 'cp',
+            'options': '-T',
+            'dest_as_dir': False,
             'recursive': 'yes',
             'backup_originals': 'yes'}
 
@@ -122,17 +124,30 @@ def conf_arg_parser():
     parser.add_argument('-c', '--command', help='converting command')
     parser.add_argument('-o', '--options',
                         help='options of converting command')
+    parser.add_argument('--dest_as_dir',
+                        help='take to command directory name instead of filename as target',
+                        action='store_true')
+
     args = parser.parse_args(remaining_argv)
     logging.basicConfig(level=logging.INFO, filename='convert.log', filemode='w')
 
 
 def call_command(command, source_path_filename, dest_path_filename, options):
-    if subprocess.call([command, source_path_filename,
-                        dest_path_filename, options]):
+    """Call command. Subprocess.call return non-zero if error
+    occurs, without exception"""
+    print ('calling with args:\ncommand: {command} options: {op}\n'
+           'source path: {sp}\ndestination path: {dp}\n').format(command=command,
+                                                                 op=options,
+                                                                 sp=source_path_filename,
+                                                                 dp=dest_path_filename
+    )
+    result = subprocess.call([command,  options, source_path_filename,
+                        dest_path_filename])
+    if result:
         logging.error('Error while converting %s' % source_path_filename)
     else:
         logging.info('%s converted successfully', source_path_filename)
-
+    return result
 
 def main(argv=None):
     # Do argv default this way, as doing it in the functional
@@ -175,7 +190,6 @@ def main(argv=None):
                 #FIX: wtf is '(overwrite if exist)'?
                 # Compile destination path and filename (overwrite if exist)
                 dest_path_filename = source_path_filename + args.dest_extension
-                print args.convert_if_result_exist
 
                 if (os.path.exists(dest_path_filename) and 
                         args.convert_if_result_exist == 'no'):
@@ -194,40 +208,41 @@ def main(argv=None):
                         # remove existing file
                         os.remove(dest_path_filename)
                         print 'remove existing destination'
-                    call_command(args.command, source_path_filename, dest_path_filename, args.options)
-                    print 'doing job'
-
-                # Call command. Subprocess.call return non-zero if error
-                # occurs, without exception
+                    if args.dest_as_dir:
+                        result = call_command(args.command, source_path_filename, dirpath, args.options)
+                    else:
+                        result = call_command(args.command, source_path_filename, dest_path_filename, args.options)
 
                 # backup folder existing check and moving .mov to it
                 #TODO: act_original check
-                if args.act_original == 'move':
-                    backup_path_filename, backup_path_dir = get_backup_path_filename(
-                        store_path=args.store_path,
-                        backup_directory=args.backup_directory,
-                        source_path_filename=source_path_filename,
-                        source_dir=args.source_dir,
-                        filename=filename
-                    )
-                    print 'back: ', backup_path_filename
+                if not result:
+                    if args.act_original == 'move':
+                        backup_path_filename, backup_path_dir = get_backup_path_filename(
+                            store_path=args.store_path,
+                            backup_directory=args.backup_directory,
+                            source_path_filename=source_path_filename,
+                            source_dir=args.source_dir,
+                            dirpath=dirpath,
+                            filename=filename
+                        )
+                        print 'back: ', backup_path_filename
 
-                    if not os.access(backup_path_filename, os.F_OK):
-                        os.makedirs(args.backup_directory + dirpath, 0700)
-                    if os.access(backup_path_filename, os.F_OK):
-                        os.remove(backup_path_filename)
-                        logging.info('old backup file %s was removed!',
-                                     backup_path_filename)
-                    else:
-                        os.rename(source_path_filename, backup_path_filename)
-                elif args.act_original == 'delete':
-                    if os.access(source_path_filename, os.F_OK):
-                        os.remove(source_path_filename)
-                        logging.info('original file %s was removed',
-                                     source_path_filename)
-                    else:
-                        logging.info('can\'t get access to %s to remove',
-                                     source_path_filename)
+                        if not os.access(backup_path_dir, os.F_OK):
+                            os.makedirs(args.backup_directory + dirpath, 0700)
+                        if os.access(backup_path_filename, os.F_OK):
+                            os.remove(backup_path_filename)
+                            logging.info('old backup file %s was removed!',
+                                         backup_path_filename)
+                        else:
+                            os.rename(source_path_filename, backup_path_filename)
+                    elif args.act_original == 'delete':
+                        if os.access(source_path_filename, os.F_OK):
+                            os.remove(source_path_filename)
+                            logging.info('original file %s was removed',
+                                         source_path_filename)
+                        else:
+                            logging.info('can\'t get access to %s to remove',
+                                         source_path_filename)
 
     return 0
 
