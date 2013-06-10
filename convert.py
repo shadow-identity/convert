@@ -6,12 +6,8 @@ command line arguments (arguments overrides config file parameters).
 !NB: processing existing files (store/overwrite/error) depends on the behavior
 of the program
 
-main
-wk_dir = root
-    os.walk (root, dirs, files)
-    search *.mov in files
-        yes: run convert root+files[i]
-            move *.mov into thrash dir saving original pathname to easy backup
+This is BAD program. It's does not meet requirements of the KISS principle.
+It's so sad.
 
 @author: nedr
 """
@@ -27,13 +23,13 @@ import ConfigParser
 from os.path import join
 import sys
 
+
 def get_backup_path_filename(store_path, backup_directory,
                              source_path_filename, source_dir,
                              dirpath, filename):
     """ According to args.store_path calculate full destination file-
       and directory name
     """
-    #TODO: join
     #TODO: check store_path var
     if store_path == 'full':
         return (os.path.abspath(backup_directory) + source_path_filename,
@@ -50,6 +46,7 @@ def get_backup_path_filename(store_path, backup_directory,
     '''backup_path_filename = join(args.backup_directory,
             os.path.relpath(dirpath, args.source_dir),
             dest_path_filename)'''
+
 
 def conf_arg_parser():
     """Parse any conf_file specification
@@ -73,16 +70,20 @@ def conf_arg_parser():
     else:
         defaults = {
             'source_dir': '/home/nedr/progs/convert/test_area',
-            'act_original': 'move',
+            'convert_if_result_exist': True,
+            'recursive': True,
+            #TODO: delete 'verbose' key and always take verbose output to log?
+            'verbose': True,  #FIXME: not implemented
+            'act_original': 'ignore',  # ['ignore', 'move', 'delete']
             'backup_directory': '/home/nedr/progs/convert/backup',
             'source_extension': '.mov',
             'dest_extension': '.avi',
-            'store_path': 'relative',
+            'store_path': 'relative',  # ['full', 'relative', 'dont']
+            'store_existing_backups': False,
             'command': 'cp',
             'options': '-T',
             'dest_as_dir': False,
-            'recursive': 'yes',
-            'backup_originals': 'yes'}
+            }
 
     # Parse rest of arguments
     parser = argparse.ArgumentParser(
@@ -139,15 +140,15 @@ def call_command(command, source_path_filename, dest_path_filename, options):
            'source path: {sp}\ndestination path: {dp}\n').format(command=command,
                                                                  op=options,
                                                                  sp=source_path_filename,
-                                                                 dp=dest_path_filename
-    )
+                                                                 dp=dest_path_filename)
     result = subprocess.call([command,  options, source_path_filename,
-                        dest_path_filename])
+                              dest_path_filename])
     if result:
-        logging.error('Error while converting %s' % source_path_filename)
+        logging.error('Error %i while converting %s' % (result, source_path_filename))
     else:
         logging.info('%s converted successfully', source_path_filename)
     return result
+
 
 def main(argv=None):
     # Do argv default this way, as doing it in the functional
@@ -159,29 +160,32 @@ def main(argv=None):
     print args
 
     logging.info(
-        '''== %s ===
-    converting %s
-    from       %s
-    to         %s (store path = %s)
+    '''=== %s ===
+    converting %s to %s
+    from       %s (recursive: %s)
     using      %s %s
-    backups of %s moves to %s
-    overwrite existing converted files: %s
-    store path: %s''',
-        datetime.datetime.now().strftime("%Y %B %d %I:%M%p"),
-        args.source_extension,
-        args.source_dir,
-        args.dest_extension,
-        args.store_path,
-        args.command,
-        args.options,
-        args.source_extension,
-        args.backup_directory,
-        args.convert_if_result_exist,
-        args.store_existing_backups)
+    second argument is directory (True) or file (False)? %s
+    if destination exist it'll be overwritten? %s
+
+    original files are %s d
+    backups moves to %s
+    (%s stored)
+    existing backups stored? %s''',
+            datetime.datetime.now().strftime("%Y %B %d %I:%M%p"),
+            args.source_extension, args.dest_extension,
+            args.source_dir, args.recursive,
+            args.command, args.options,
+            args.dest_as_dir,
+            args.convert_if_result_exist,
+            args.act_original,
+            args.backup_directory,
+            args.store_path,
+            args.store_existing_backups)
 
     # search files ended with source_extension
     # At first get names of all file and directory objects
     for dirpath, dirnames, filenames in os.walk(args.source_dir):
+        logging.info('Scanning %s', dirpath)
         for filename in filenames:
             # Check every file extension (end of filename) for compliance to
             # source_extension
@@ -193,12 +197,12 @@ def main(argv=None):
 
                 if (os.path.exists(dest_path_filename) and 
                         args.convert_if_result_exist == 'no'):
-                    print ('destination %s exist, don\'t overwrite'
-                           % dest_path_filename)
+                    logging.info('destination %s exist, don\'t overwrite',
+                                 dest_path_filename)
                     continue
 
-                print 'from: ', source_path_filename
-                print 'to  : ', dest_path_filename
+                logging.info('from: %s', filename)
+                logging.info('to  : %s', dest_path_filename)
 
                 # check if destination exist
                 if not os.path.exists(dest_path_filename) or (
@@ -207,7 +211,7 @@ def main(argv=None):
                     if args.convert_if_result_exist is True:
                         # remove existing file
                         os.remove(dest_path_filename)
-                        print 'remove existing destination'
+                        logging.info('remove existing destination %s', dest_path_filename)
                     if args.dest_as_dir:
                         result = call_command(args.command, source_path_filename, dirpath, args.options)
                     else:
@@ -225,10 +229,10 @@ def main(argv=None):
                             dirpath=dirpath,
                             filename=filename
                         )
-                        print 'back: ', backup_path_filename
+                        logging.info('backup: %s', backup_path_filename)
 
                         if not os.access(backup_path_dir, os.F_OK):
-                            os.makedirs(args.backup_directory + dirpath, 0700)
+                            os.makedirs(dest_path_filename, 0700)
                         if os.access(backup_path_filename, os.F_OK):
                             os.remove(backup_path_filename)
                             logging.info('old backup file %s was removed!',
