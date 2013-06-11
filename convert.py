@@ -74,7 +74,7 @@ def conf_arg_parser():
             'recursive': True,
             #TODO: delete 'verbose' key and always take verbose output to log?
             'verbose': True,  #FIXME: not implemented
-            'act_original': 'ignore',  # ['ignore', 'move', 'delete']
+            'act_original': 'move',  # ['ignore', 'move', 'delete']
             'backup_directory': '/home/nedr/progs/convert/backup',
             'source_extension': '.mov',
             'dest_extension': '.avi',
@@ -82,7 +82,7 @@ def conf_arg_parser():
             'store_existing_backups': False,
             'command': 'cp',
             'options': '-T',
-            'dest_as_dir': False,
+            'dest_as_dir': True,
             }
 
     # Parse rest of arguments
@@ -136,17 +136,15 @@ def conf_arg_parser():
 def call_command(command, source_path_filename, dest_path_filename, options):
     """Call command. Subprocess.call return non-zero if error
     occurs, without exception"""
-    print ('calling with args:\ncommand: {command} options: {op}\n'
-           'source path: {sp}\ndestination path: {dp}\n').format(command=command,
-                                                                 op=options,
-                                                                 sp=source_path_filename,
-                                                                 dp=dest_path_filename)
+    logging.info('calling command: %s options: %s '
+                 'source path: %s destination path: %s',
+                 command, options, source_path_filename, dest_path_filename)
     result = subprocess.call([command,  options, source_path_filename,
                               dest_path_filename])
     if result:
         logging.error('Error %i while converting %s' % (result, source_path_filename))
     else:
-        logging.info('%s converted successfully', source_path_filename)
+        logging.info('%s converted SUCCESSFULLY', source_path_filename)
     return result
 
 
@@ -166,10 +164,9 @@ def main(argv=None):
     using      %s %s
     second argument is directory (True) or file (False)? %s
     if destination exist it'll be overwritten? %s
-
-    original files are %s d
+    original files are %sd
     backups moves to %s
-    (%s stored)
+    (%s path stored)
     existing backups stored? %s''',
             datetime.datetime.now().strftime("%Y %B %d %I:%M%p"),
             args.source_extension, args.dest_extension,
@@ -195,59 +192,67 @@ def main(argv=None):
                 # Compile destination path and filename (overwrite if exist)
                 dest_path_filename = source_path_filename + args.dest_extension
 
-                if (os.path.exists(dest_path_filename) and 
-                        args.convert_if_result_exist == 'no'):
-                    logging.info('destination %s exist, don\'t overwrite',
-                                 dest_path_filename)
-                    continue
-
                 logging.info('from: %s', filename)
                 logging.info('to  : %s', dest_path_filename)
 
                 # check if destination exist
                 if not os.path.exists(dest_path_filename) or (
                         os.path.exists(dest_path_filename) and args.convert_if_result_exist):
-                    # no output file or 'convert if result exist' is set: execute command
-                    if args.convert_if_result_exist is True:
-                        # remove existing file
+                    # execute command (first deleting the file if needed)
+                    if os.path.exists(dest_path_filename) and args.convert_if_result_exist:
+                        # delete existing file
                         os.remove(dest_path_filename)
-                        logging.info('remove existing destination %s', dest_path_filename)
+                        logging.warning('removed existing destination %s', dest_path_filename)
                     if args.dest_as_dir:
                         result = call_command(args.command, source_path_filename, dirpath, args.options)
                     else:
                         result = call_command(args.command, source_path_filename, dest_path_filename, args.options)
 
-                # backup folder existing check and moving .mov to it
-                #TODO: act_original check
-                if not result:
-                    if args.act_original == 'move':
-                        backup_path_filename, backup_path_dir = get_backup_path_filename(
-                            store_path=args.store_path,
-                            backup_directory=args.backup_directory,
-                            source_path_filename=source_path_filename,
-                            source_dir=args.source_dir,
-                            dirpath=dirpath,
-                            filename=filename
-                        )
-                        logging.info('backup: %s', backup_path_filename)
+                    if not result:
+                        # command returns 0 - do backup job
+                        print '{} created'.format(dest_path_filename)
+                        if args.act_original == 'move':
+                            backup_path_filename, backup_path_dir = get_backup_path_filename(
+                                store_path=args.store_path,
+                                backup_directory=args.backup_directory,
+                                source_path_filename=source_path_filename,
+                                source_dir=args.source_dir,
+                                dirpath=dirpath,
+                                filename=filename
+                            )
+                            logging.info('backup: %s', backup_path_filename)
 
-                        if not os.access(backup_path_dir, os.F_OK):
-                            os.makedirs(dest_path_filename, 0700)
-                        if os.access(backup_path_filename, os.F_OK):
-                            os.remove(backup_path_filename)
-                            logging.info('old backup file %s was removed!',
-                                         backup_path_filename)
-                        else:
-                            os.rename(source_path_filename, backup_path_filename)
-                    elif args.act_original == 'delete':
-                        if os.access(source_path_filename, os.F_OK):
-                            os.remove(source_path_filename)
-                            logging.info('original file %s was removed',
-                                         source_path_filename)
-                        else:
-                            logging.info('can\'t get access to %s to remove',
-                                         source_path_filename)
-
+                            if not os.access(backup_path_dir, os.F_OK):
+                                os.makedirs(backup_path_dir, 0700)
+                            if not os.access(backup_path_filename, os.F_OK) or (
+                                    os.access(backup_path_filename, os.F_OK) and not args.store_existing_backups):
+                                if os.access(backup_path_filename, os.F_OK):
+                                    os.remove(backup_path_filename)
+                                    logging.warning('old backup file %s was removed!',
+                                                    backup_path_filename)
+                                os.rename(source_path_filename, backup_path_filename)
+                            else:
+                                #TODO: compare original and existing backup!!!!!!!
+                                os.remove(source_path_filename)
+                                logging.info('backup %s exist, left in place, DELETE original', backup_path_filename)
+                                print ('Backup already exist, left it, '
+                                       'delete original file {}').format(source_path_filename)
+                        elif args.act_original == 'delete':
+                            if os.access(source_path_filename, os.F_OK):
+                                os.remove(source_path_filename)
+                                logging.warning('original file %s was removed',
+                                             source_path_filename)
+                            else:
+                                logging.error('can\'t get access to %s to remove',
+                                              source_path_filename)
+                else:
+                    # destination already exist and we not allowed to rewrite it
+                    logging.warning('SKIP %s (destination already exist)', source_path_filename)
+                    print 'SKIP {} (see logs)'.format(source_path_filename)
+        if not args.recursive:
+            logging.warning('Search was not recursive - exit')
+            print 'Search was not recursive - exit'
+            break
     return 0
 
 if __name__ == "__main__":
