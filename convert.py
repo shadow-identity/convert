@@ -6,12 +6,11 @@ command line arguments (arguments overrides config file parameters).
 !NB: processing existing files (store/overwrite/error) depends on the behavior
 of the program
 
-This is BAD program. It's does not meet requirements of the KISS principle.
+This is a BAD program. It does not meet requirements of the KISS principle. It is not pythonic.
 It's so sad.
 
 @author: nedr
 """
-#TODO: logging to file (verbose)
 #TODO: exceptions
 
 import os
@@ -22,6 +21,7 @@ import argparse
 import ConfigParser
 from os.path import join
 import sys
+import hashlib
 
 
 def get_backup_path_filename(store_path, backup_directory,
@@ -43,9 +43,6 @@ def get_backup_path_filename(store_path, backup_directory,
     else:
         return (os.path.join(backup_directory, filename),
                 backup_directory)
-    '''backup_path_filename = join(args.backup_directory,
-            os.path.relpath(dirpath, args.source_dir),
-            dest_path_filename)'''
 
 
 def conf_arg_parser():
@@ -72,17 +69,14 @@ def conf_arg_parser():
             'source_dir': '/home/nedr/progs/convert/test_area',
             'convert_if_result_exist': True,
             'recursive': True,
-            #TODO: delete 'verbose' key and always take verbose output to log?
-            'verbose': True,  #FIXME: not implemented
             'act_original': 'move',  # ['ignore', 'move', 'delete']
             'backup_directory': '/home/nedr/progs/convert/backup',
             'source_extension': '.mov',
             'dest_extension': '.avi',
             'store_path': 'relative',  # ['full', 'relative', 'dont']
-            'store_existing_backups': False,
             'command': 'cp',
             'options': '-T',
-            'dest_as_dir': True,
+            'dest_as_dir': False,
             }
 
     # Parse rest of arguments
@@ -99,8 +93,6 @@ def conf_arg_parser():
                         help='if not - skip them', action='store_true')
     parser.add_argument('-r', '--recursive',
                         help='recursive search, not implemented yet',
-                        action='store_true')
-    parser.add_argument('-v', '--verbose', help='increase output verbosity',
                         action='store_true')
     parser.add_argument('-b', '--act_original',
                         help='action with the original file: '
@@ -119,9 +111,6 @@ def conf_arg_parser():
                              ' files for backing up or \'dont\' save path at all'
                              ' (dangerous)',
                         choices=['full', 'relative', 'dont'])
-    parser.add_argument('-f', '--store_existing_backups',
-                        help='don\'t overwrite existing backups',
-                        action='store_true')
     parser.add_argument('-c', '--command', help='converting command')
     parser.add_argument('-o', '--options',
                         help='options of converting command')
@@ -130,7 +119,7 @@ def conf_arg_parser():
                         action='store_true')
 
     args = parser.parse_args(remaining_argv)
-    logging.basicConfig(level=logging.INFO, filename='convert.log', filemode='w')
+    logging.basicConfig(level=logging.INFO, filename='convert.log')
 
 
 def call_command(command, source_path_filename, dest_path_filename, options):
@@ -146,6 +135,32 @@ def call_command(command, source_path_filename, dest_path_filename, options):
     else:
         logging.info('%s converted SUCCESSFULLY', source_path_filename)
     return result
+
+
+def md5Checksum(file_path):
+    """ Calculate md5 hash of given file
+    """
+    with open(file_path, 'rb') as file_contents:
+        file_hash = hashlib.md5()
+        while True:
+            file_part = file_contents.read(8192)
+            if not file_part:
+                break
+            file_hash.update(file_part)
+        return file_hash.hexdigest()
+
+
+def identity_verification(file1, file2):
+    """
+    Checks that file1 and file2 are the same.
+    At first - by size, then by md5
+    """
+    if os.stat(file1).st_size == os.stat(file2).st_size:
+        hash1 = md5Checksum(file1)
+        hash2 = md5Checksum(file2)
+        if hash1 == hash2:
+            return 'same'
+    return 'different'
 
 
 def main(argv=None):
@@ -166,8 +181,7 @@ def main(argv=None):
     if destination exist it'll be overwritten? %s
     original files are %sd
     backups moves to %s
-    (%s path stored)
-    existing backups stored? %s''',
+    (%s path stored)''',
             datetime.datetime.now().strftime("%Y %B %d %I:%M%p"),
             args.source_extension, args.dest_extension,
             args.source_dir, args.recursive,
@@ -176,8 +190,7 @@ def main(argv=None):
             args.convert_if_result_exist,
             args.act_original,
             args.backup_directory,
-            args.store_path,
-            args.store_existing_backups)
+            args.store_path)
 
     # search files ended with source_extension
     # At first get names of all file and directory objects
@@ -224,24 +237,27 @@ def main(argv=None):
 
                             if not os.access(backup_path_dir, os.F_OK):
                                 os.makedirs(backup_path_dir, 0700)
-                            if not os.access(backup_path_filename, os.F_OK) or (
-                                    os.access(backup_path_filename, os.F_OK) and not args.store_existing_backups):
-                                if os.access(backup_path_filename, os.F_OK):
-                                    os.remove(backup_path_filename)
-                                    logging.warning('old backup file %s was removed!',
-                                                    backup_path_filename)
+
+                            if not os.access(backup_path_filename, os.F_OK):
                                 os.rename(source_path_filename, backup_path_filename)
                             else:
-                                #TODO: compare original and existing backup!!!!!!!
-                                os.remove(source_path_filename)
-                                logging.info('backup %s exist, left in place, DELETE original', backup_path_filename)
-                                print ('Backup already exist, left it, '
-                                       'delete original file {}').format(source_path_filename)
+                                # check that the original and backupped files are the same
+                                files = identity_verification(backup_path_filename,
+                                                              source_path_filename)
+                                if files == 'same':
+                                    os.remove(source_path_filename)
+                                elif files == 'different':
+                                    logging.error('Original file %s and old backup file %s are different! '
+                                                  'Both files are stored. Needs manual reconcile',
+                                                  source_path_filename, backup_path_filename)
+                                    print ('WARNING: original file {} and old backup file {} are different. '
+                                           'Both files are stored. Needs manual reconcile').\
+                                        format(source_path_filename, backup_path_filename)
                         elif args.act_original == 'delete':
                             if os.access(source_path_filename, os.F_OK):
                                 os.remove(source_path_filename)
                                 logging.warning('original file %s was removed',
-                                             source_path_filename)
+                                                source_path_filename)
                             else:
                                 logging.error('can\'t get access to %s to remove',
                                               source_path_filename)
