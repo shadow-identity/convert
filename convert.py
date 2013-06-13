@@ -65,19 +65,18 @@ def conf_arg_parser():
         config.read([args.conf_file])
         defaults = dict(config.items("Main"))
     else:
-        defaults = {
-            'source_dir': '/home/nedr/progs/convert/test_area',
-            'convert_if_result_exist': True,
-            'recursive': True,
-            'act_original': 'move',  # ['ignore', 'move', 'delete']
-            'backup_directory': '/home/nedr/progs/convert/backup',
-            'source_extension': '.mov',
-            'dest_extension': '.avi',
-            'store_path': 'relative',  # ['full', 'relative', 'dont']
-            'command': 'cp',
-            'options': '-T',
-            'dest_as_dir': False,
-            }
+        defaults = {'source_dir': '/home/nedr/progs/convert/test_area',
+                    'convert_if_result_exist': True,
+                    'recursive': True,
+                    'act_original': 'move',  # ['ignore', 'move', 'delete']
+                    'backup_directory': '/home/nedr/progs/convert/backup',
+                    'source_extension': '.mov',
+                    'dest_extension': '.avi',
+                    'store_path': 'relative',  # ['full', 'relative', 'dont']
+                    'command': 'cp',
+                    'options': '-T',
+                    'dest_as_dir': False,
+        }
 
     # Parse rest of arguments
     parser = argparse.ArgumentParser(
@@ -171,6 +170,7 @@ def main(argv=None):
 
     conf_arg_parser()
     print args
+    print argv
 
     logging.info(
     '''=== %s ===
@@ -201,8 +201,7 @@ def main(argv=None):
             # source_extension
             if filename.lower().endswith(args.source_extension.lower()):
                 source_path_filename = join(dirpath, filename)
-                #FIX: wtf is '(overwrite if exist)'?
-                # Compile destination path and filename (overwrite if exist)
+                # Compile destination path and filename
                 dest_path_filename = source_path_filename + args.dest_extension
 
                 logging.info('from: %s', filename)
