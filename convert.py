@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Seek target files in directoryes and run defined command according config or
+Seek target files in directories and run defined command according config or
 command line arguments (arguments overrides config file parameters).
 
-!NB: processing existing files (store/overwrite/error) depends on the behavior
-of the program
+To describe all options run convert.py --help
 
-This is a BAD program. It does not meet requirements of the KISS principle. It is not pythonic.
-It's so sad.
+This is a BAD program. It does not meet requirements of the KISS principle.
+It is not pythonic. It's so sad.
 
-@author: nedr
+@author: pavel.nedr@gmail.com
 """
-#TODO: exceptions
 
 import os
 import subprocess
@@ -30,10 +28,9 @@ def get_backup_path_filename(store_path, backup_directory,
     """ According to args.store_path calculate full destination file-
       and directory name
     """
-    #TODO: check store_path var
     if store_path == 'full':
-        return (os.path.abspath(backup_directory) + source_path_filename,
-                os.path.abspath(backup_directory) + dirpath)
+        return (os.path.abspath(backup_directory) + os.path.abspath(source_path_filename),
+                os.path.abspath(backup_directory) + os.path.abspath(dirpath))
     elif store_path == 'relative':
         return (os.path.join(backup_directory,
                              os.path.relpath(source_path_filename,
@@ -45,7 +42,7 @@ def get_backup_path_filename(store_path, backup_directory,
                 backup_directory)
 
 
-def conf_arg_parser():
+def config_and_argument_parser():
     """Parse any conf_file specification
     We make this parser with add_help=False so that
     it doesn't parse -h and print help."""
@@ -64,6 +61,12 @@ def conf_arg_parser():
         config = ConfigParser.SafeConfigParser()
         config.read([args.conf_file])
         defaults = dict(config.items("Main"))
+        for option in defaults:
+            # convert strings values to boolean to further argument parsing
+            try:
+                defaults[option] = config.getboolean("Main", option)
+            except ValueError:
+                pass
     else:
         defaults = {'source_dir': '/home/nedr/progs/convert/test_area',
                     'convert_if_result_exist': True,
@@ -72,7 +75,7 @@ def conf_arg_parser():
                     'backup_directory': '/home/nedr/progs/convert/backup',
                     'source_extension': '.mov',
                     'dest_extension': '.avi',
-                    'store_path': 'relative',  # ['full', 'relative', 'dont']
+                    'store_path': 'relative',  # ['full', 'relative', 'discard']
                     'command': 'cp',
                     'options': '-T',
                     'dest_as_dir': False,
@@ -107,9 +110,9 @@ def conf_arg_parser():
                         help='extension, that changed files will have')
     parser.add_argument('-s', '--store_path',
                         help='store \'full\' or \'relative\' path of source'
-                             ' files for backing up or \'dont\' save path at all'
+                             ' files for backing up or \'discard\' path at all'
                              ' (dangerous)',
-                        choices=['full', 'relative', 'dont'])
+                        choices=['full', 'relative', 'discard'])
     parser.add_argument('-c', '--command', help='converting command')
     parser.add_argument('-o', '--options',
                         help='options of converting command')
@@ -161,6 +164,81 @@ def identity_verification(file1, file2):
             return 'same'
     return 'different'
 
+def job(args, dirpath, filename):
+    """
+     Doing all manipulations with files
+    """
+    source_path_filename = join(dirpath, filename)
+    # Compile destination path and filename
+    dest_path_filename = source_path_filename + args.dest_extension
+
+    logging.info('from: %s', filename)
+    logging.info('to  : %s', dest_path_filename)
+
+    # check if destination exist
+    if not os.path.exists(dest_path_filename) or (
+            os.path.exists(dest_path_filename) and args.convert_if_result_exist):
+        # execute command (first deleting the file if needed)
+        if os.path.exists(dest_path_filename) and args.convert_if_result_exist:
+            # delete existing file
+            os.remove(dest_path_filename)
+            logging.warning('removed existing destination %s', dest_path_filename)
+        if args.dest_as_dir:
+            result = call_command(args.command,
+                                  source_path_filename,
+                                  dirpath,
+                                  args.options)
+        else:
+            result = call_command(args.command,
+                                  source_path_filename,
+                                  dest_path_filename,
+                                  args.options)
+
+        if not result:
+            # command returns 0 - do backup job
+            print '{} created'.format(dest_path_filename)
+            if args.act_original == 'move':
+                backup_path_filename, backup_path_dir = get_backup_path_filename(
+                    store_path=args.store_path,
+                    backup_directory=args.backup_directory,
+                    source_path_filename=source_path_filename,
+                    source_dir=args.source_dir,
+                    dirpath=dirpath,
+                    filename=filename
+                )
+                logging.info('backup: %s', backup_path_filename)
+
+                if not os.access(backup_path_dir, os.F_OK):
+                    os.makedirs(backup_path_dir, 0700)
+
+                if not os.access(backup_path_filename, os.F_OK):
+                    os.rename(source_path_filename, backup_path_filename)
+                else:
+                    # check that the original and backupped files are the same
+                    files = identity_verification(backup_path_filename,
+                                                  source_path_filename)
+                    if files == 'same':
+                        os.remove(source_path_filename)
+                    elif files == 'different':
+                        logging.error('Original file %s and old backup file %s are different! '
+                                      'Both files are stored. Needs manual reconcile',
+                                      source_path_filename, backup_path_filename)
+                        print ('WARNING: original file {} and old backup file {} are different. '
+                               'Both files are stored. Needs manual reconcile').\
+                            format(source_path_filename, backup_path_filename)
+            elif args.act_original == 'delete':
+                if os.access(source_path_filename, os.F_OK):
+                    os.remove(source_path_filename)
+                    logging.warning('original file %s was removed',
+                                    source_path_filename)
+                else:
+                    logging.error('can\'t get access to %s to remove',
+                                  source_path_filename)
+    else:
+        # destination already exist and we not allowed to rewrite it
+        logging.warning('SKIP %s (destination already exist)', source_path_filename)
+        print 'SKIP {} (see logs)'.format(source_path_filename)
+
 
 def main(argv=None):
     # Do argv default this way, as doing it in the functional
@@ -168,9 +246,7 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
 
-    conf_arg_parser()
-    print args
-    print argv
+    config_and_argument_parser()
 
     logging.info(
     '''=== %s ===
@@ -200,70 +276,7 @@ def main(argv=None):
             # Check every file extension (end of filename) for compliance to
             # source_extension
             if filename.lower().endswith(args.source_extension.lower()):
-                source_path_filename = join(dirpath, filename)
-                # Compile destination path and filename
-                dest_path_filename = source_path_filename + args.dest_extension
-
-                logging.info('from: %s', filename)
-                logging.info('to  : %s', dest_path_filename)
-
-                # check if destination exist
-                if not os.path.exists(dest_path_filename) or (
-                        os.path.exists(dest_path_filename) and args.convert_if_result_exist):
-                    # execute command (first deleting the file if needed)
-                    if os.path.exists(dest_path_filename) and args.convert_if_result_exist:
-                        # delete existing file
-                        os.remove(dest_path_filename)
-                        logging.warning('removed existing destination %s', dest_path_filename)
-                    if args.dest_as_dir:
-                        result = call_command(args.command, source_path_filename, dirpath, args.options)
-                    else:
-                        result = call_command(args.command, source_path_filename, dest_path_filename, args.options)
-
-                    if not result:
-                        # command returns 0 - do backup job
-                        print '{} created'.format(dest_path_filename)
-                        if args.act_original == 'move':
-                            backup_path_filename, backup_path_dir = get_backup_path_filename(
-                                store_path=args.store_path,
-                                backup_directory=args.backup_directory,
-                                source_path_filename=source_path_filename,
-                                source_dir=args.source_dir,
-                                dirpath=dirpath,
-                                filename=filename
-                            )
-                            logging.info('backup: %s', backup_path_filename)
-
-                            if not os.access(backup_path_dir, os.F_OK):
-                                os.makedirs(backup_path_dir, 0700)
-
-                            if not os.access(backup_path_filename, os.F_OK):
-                                os.rename(source_path_filename, backup_path_filename)
-                            else:
-                                # check that the original and backupped files are the same
-                                files = identity_verification(backup_path_filename,
-                                                              source_path_filename)
-                                if files == 'same':
-                                    os.remove(source_path_filename)
-                                elif files == 'different':
-                                    logging.error('Original file %s and old backup file %s are different! '
-                                                  'Both files are stored. Needs manual reconcile',
-                                                  source_path_filename, backup_path_filename)
-                                    print ('WARNING: original file {} and old backup file {} are different. '
-                                           'Both files are stored. Needs manual reconcile').\
-                                        format(source_path_filename, backup_path_filename)
-                        elif args.act_original == 'delete':
-                            if os.access(source_path_filename, os.F_OK):
-                                os.remove(source_path_filename)
-                                logging.warning('original file %s was removed',
-                                                source_path_filename)
-                            else:
-                                logging.error('can\'t get access to %s to remove',
-                                              source_path_filename)
-                else:
-                    # destination already exist and we not allowed to rewrite it
-                    logging.warning('SKIP %s (destination already exist)', source_path_filename)
-                    print 'SKIP {} (see logs)'.format(source_path_filename)
+                job(args, dirpath, filename)
         if not args.recursive:
             logging.warning('Search was not recursive - exit')
             print 'Search was not recursive - exit'

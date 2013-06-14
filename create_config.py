@@ -5,7 +5,6 @@ config = ConfigParser.RawConfigParser()
 
 config.add_section('Main')
 config.set('Main', 'source_dir', '/home/nedr/progs/convert/test_area/source')
-#FIXME: how to turn it into boolean?
 config.set('Main', 'convert_if_result_exist', 'no')
 config.set('Main', 'recursive', 'yes')
 config.set('Main', 'verbose', 'No')
